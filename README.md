@@ -54,30 +54,87 @@ The killer feature — an end-to-end automated job application pipeline:
 
 ---
 
-## Built on OpenClaw + Lobster
+## Built on OpenClaw, Lobster & ClawdBot
 
-This dashboard is built as a management layer on top of **[OpenClaw](https://github.com/anthropics/openclaw)** — Anthropic's open-source AI agent framework. Each workspace spins up an OpenClaw Docker container with its own Gateway API, enabling:
+This project is a **management dashboard built on top of the OpenClaw/ClawdBot/Lobster ecosystem** — the AI agent framework and workflow tools developed around Anthropic's Claude.
 
-- **Agent Execution** — OpenClaw containers run Claude-powered agents with tool use (web search, scraping, code execution, messaging)
-- **Browser Automation** — OpenClaw Gateway provides browser navigation, accessibility tree snapshots, and form interaction via its built-in CDP bridge
-- **Channel Delivery** — OpenClaw handles Telegram/Slack/Discord message delivery natively
+### OpenClaw — The Agent Framework
 
-The **[Lobster](https://github.com/nichochar/lobster)** job application automation tool was studied and referenced during development of the JobApply module. Lobster's approach to form detection, ATS identification, and field mapping informed the design of our Playwright-based career page automation, though our implementation diverges significantly — we use direct Playwright automation inside Celery workers rather than Lobster's CDP-based approach, and we added full Greenhouse custom field handling, keyword-priority dropdown matching, and retry-on-validation-error logic.
+**[OpenClaw](https://github.com/anthropics/openclaw)** is the open-source AI agent framework at the core of this dashboard. Each workspace spins up a dedicated OpenClaw Docker container (`openclaw/openclaw:latest`) with:
 
-### How OpenClaw Powers the Dashboard
+- **Gateway API** — WebSocket server on a per-workspace port (`19000 + workspace_id`) for sending messages and receiving agent responses
+- **Tool-use agent loop** — Claude/GPT calls tools (web_search, scrape_webpage, save_result, send_message) and the framework executes them
+- **Browser automation** — Built-in CDP bridge for navigating pages, taking accessibility tree snapshots, and interacting with form elements
+- **Channel delivery** — Native Telegram, Slack, and Discord integration via bot tokens configured per workspace
+
+The dashboard generates OpenClaw configuration for each workspace:
+```
+.openclaw/
+├── openclaw.json          # Agent model, channels, gateway settings
+├── workspace/
+│   ├── SOUL.md            # Agent personality and system prompt
+│   └── skills/            # Installed skill files from ClawHub
+├── credentials/           # Channel tokens (telegram.json, slack.json)
+└── .env                   # API keys (ANTHROPIC_API_KEY, etc.)
+```
+
+### ClawdBot — The Tool Endpoint Platform
+
+**ClawdBot** is the tool/skill ecosystem that OpenClaw agents use. The dashboard integrates with it through:
+
+- **ClawHub** — Skill marketplace with 1,662 installable skills (`skills/clawhub_sync.py` syncs them)
+- **ClawdBot skills** — Skills like `clawdbot-filesystem` (file operations), `claw-shell` (shell commands), `job-search-mcp` (job board scraping) are installed into workspaces and injected into the agent's system prompt
+- **Tool endpoints** — ClawdBot exposes tools at `{CLAWD_URL}/tools/invoke` that agents and Lobster workflows can call
+
+### Lobster — The Workflow Engine
+
+**[Lobster](https://github.com/clawdbot/lobster)** (`@clawdbot/lobster`) is a Moltbot-native workflow orchestration engine that provides:
+
+- **Typed JSON pipelines** — Composable workflows that pipe structured data (not text), enabling deterministic multi-step automation
+- **`clawd.invoke`** — Command that calls ClawdBot tool endpoints, allowing workflows to use any installed skill
+- **Approval gates** — Human-in-the-loop checkpoints for workflows that need review before proceeding
+- **Token efficiency** — Pre-composed workflows save tokens vs. having the AI construct queries each time
+
+Lobster's approach to browser automation, ATS detection, and form field mapping directly influenced the JobApply module's Playwright implementation. Our `playwright_apply.py` builds on concepts from Lobster's CDP-based approach but diverges with:
+- Direct Playwright control (vs. CDP snapshots) for more reliable form filling
+- Keyword-priority dropdown matching for Greenhouse custom fields
+- Validation error retry logic
+- 15+ ATS detection patterns
+
+### How They Work Together
 
 ```
-Dashboard (Django) ──► OpenClaw Container (per workspace)
-                           │
-                           ├── Claude/GPT tool-use agent loop
-                           ├── Built-in tools: web_search, scrape, save_result
-                           ├── Browser automation via Gateway API
-                           └── Channel notifications (Telegram, Slack, Discord)
+┌─────────────────────────────────────────────────────────┐
+│            OpenClaw Dashboard (this repo)                │
+│                 Django + Next.js                         │
+│                                                         │
+│  ┌────────────────────────────────────────────────────┐ │
+│  │  Per-Workspace OpenClaw Container                  │ │
+│  │  • Claude/GPT agent with tool-use loop             │ │
+│  │  • Gateway WebSocket API (port 19000+id)           │ │
+│  │  • ClawdBot skills injected into system prompt     │ │
+│  │  • Channels: Telegram / Slack / Discord            │ │
+│  └────────────────────────────────────────────────────┘ │
+│                          │                              │
+│                  Gateway API calls                      │
+│                          │                              │
+│  ┌────────────────────────────────────────────────────┐ │
+│  │  Lobster Workflow Engine (optional)                 │ │
+│  │  • clawd.invoke → ClawdBot tool endpoints          │ │
+│  │  • Deterministic pipelines (token-efficient)       │ │
+│  │  • Approval gates for human review                 │ │
+│  └────────────────────────────────────────────────────┘ │
+│                                                         │
+│  ┌────────────────────────────────────────────────────┐ │
+│  │  JobApply Module (Celery workers)                  │ │
+│  │  • OpenClaw Gateway mode (apply_automation.py)     │ │
+│  │    → Browser snapshots + accessibility tree        │ │
+│  │  • Direct Playwright mode (playwright_apply.py)    │ │
+│  │    → Headless Chromium for career page forms       │ │
+│  │  • Informed by Lobster's ATS detection patterns    │ │
+│  └────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
 ```
-
-For the **JobApply module specifically**, the automation runs in two modes:
-1. **OpenClaw Gateway mode** (`apply_automation.py`) — Uses OpenClaw's browser snapshot + accessibility tree for form interaction
-2. **Direct Playwright mode** (`playwright_apply.py`) — Runs headless Chromium directly in the Celery worker for career page form filling (Greenhouse, Lever, etc.)
 
 ---
 
