@@ -1,0 +1,56 @@
+# Django Core
+Django>=5.0,<6.0
+djangorestframework>=3.14,<4.0
+djangorestframework-simplejwt>=5.3,<6.0
+django-cors-headers>=4.3,<5.0
+drf-nested-routers>=0.93,<1.0
+
+# Database
+psycopg2-binary>=2.9,<3.0
+
+# Async Tasks
+celery>=5.3,<6.0
+redis>=5.0,<6.0
+
+# Environment & Config
+python-dotenv>=1.0,<2.0
+
+# Docker SDK
+docker>=7.0,<8.0
+
+# Payments
+stripe>=7.0,<8.0
+
+# Utilities
+python-dateutil>=2.8,<3.0
+
+# AI SDKs (for test message feature)
+anthropic>=0.18,<1.0
+openai>=1.10,<2.0
+
+# Web scraping (for agent tools)
+beautifulsoup4>=4.12,<5.0
+requests>=2.31,<3.0
+
+# Job Search (JobSpy - scrapes LinkedIn, Indeed, Glassdoor)
+python-jobspy>=1.1,<2.0
+pandas>=2.0,<3.0
+
+# Web Search (DuckDuckGo - free, no API key)
+duckduckgo-search>=6.0,<7.0
+
+# Resume parsing
+PyPDF2>=3.0,<4.0
+python-docx>=0.8.10,<1.0
+
+# WebSocket client (for OpenClaw Gateway)
+websockets>=12.0,<13.0
+
+# Browser automation (Playwright for direct job application)
+playwright>=1.40,<2.0
+
+# Production Server
+gunicorn>=21.0,<23.0
+
+# Development
+django-extensions>=3.2,<4.0
