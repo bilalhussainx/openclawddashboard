@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'billing',
     'automations',
     'jobapply',
+    'google_integration',
 ]
 
 MIDDLEWARE = [
@@ -187,6 +188,12 @@ SLACK_CLIENT_SECRET = os.getenv('SLACK_CLIENT_SECRET', '')
 SLACK_REDIRECT_URI = os.getenv('SLACK_REDIRECT_URI', 'http://localhost:8000/api/workspaces/channels/slack/callback/')
 
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
+
+# Google OAuth Configuration (for Gmail integration)
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
+# Use port 80 (nginx) for Docker, or 8000 for local dev
+GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost/api/google/oauth/callback/')
 
 # Anthropic API (for default/demo purposes)
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')

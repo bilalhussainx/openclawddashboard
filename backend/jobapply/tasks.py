@@ -269,6 +269,7 @@ def _run_playwright_apply(app, resume_data: dict) -> dict:
             resume_data=resume_data,
             cover_letter=app.cover_letter or '',
             resume_file_path=resume_file_path,
+            user_id=app.user.id,  # Pass user ID for Gmail verification code fetching
         )
         return result
     except Exception as e:

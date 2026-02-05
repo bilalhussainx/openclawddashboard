@@ -19,6 +19,111 @@ import time
 
 logger = logging.getLogger(__name__)
 
+
+def _handle_greenhouse_security_code(page, user_id, _log) -> dict:
+    """
+    Handle Greenhouse security code verification by fetching code from Gmail.
+    Polls Gmail for up to 2 minutes looking for the verification code.
+
+    Returns:
+        dict with 'success', 'method', 'error' keys
+    """
+    if not user_id:
+        _log('security_code', 'no_user', 'Cannot fetch Gmail code - user_id not provided')
+        return {
+            'success': True,  # Form was submitted
+            'method': 'greenhouse_pending_verification',
+            'error': 'Application submitted - check email for security code verification (Gmail not connected)'
+        }
+
+    try:
+        from google_integration.gmail_service import fetch_greenhouse_verification_code
+    except ImportError:
+        _log('security_code', 'import_error', 'Gmail service not available')
+        return {
+            'success': True,
+            'method': 'greenhouse_pending_verification',
+            'error': 'Application submitted - check email for security code verification'
+        }
+
+    _log('security_code', 'waiting', 'Waiting for verification code email...')
+
+    # Poll for verification code (max 2 minutes = 24 attempts * 5 seconds)
+    for attempt in range(24):
+        code = fetch_greenhouse_verification_code(user_id, max_age_minutes=3)
+        if code:
+            _log('security_code', 'found', f'Got code from Gmail: {code[:2]}****')
+
+            # Find and fill the verification input
+            # Greenhouse typically uses a specific input for the code
+            code_selectors = [
+                'input[name*="security"]',
+                'input[name*="code"]',
+                'input[placeholder*="code"]',
+                'input[aria-label*="code"]',
+                'input[type="text"]:visible',  # Fallback to visible text input
+            ]
+
+            for selector in code_selectors:
+                try:
+                    code_input = page.locator(selector).first
+                    if code_input.is_visible(timeout=1000):
+                        code_input.fill(code)
+                        _log('security_code', 'filled', f'Entered code in {selector}')
+
+                        # Find and click submit/verify button
+                        submit_selectors = [
+                            'button[type="submit"]',
+                            'button:has-text("Verify")',
+                            'button:has-text("Submit")',
+                            'button:has-text("Continue")',
+                            'input[type="submit"]',
+                        ]
+
+                        for btn_selector in submit_selectors:
+                            try:
+                                btn = page.locator(btn_selector).first
+                                if btn.is_visible(timeout=1000):
+                                    btn.click()
+                                    _log('security_code', 'submitted', 'Clicked verify button')
+                                    time.sleep(3)
+
+                                    # Check for success
+                                    body = page.locator('body').inner_text()[:500].lower()
+                                    if 'thank' in body or 'received' in body or 'submitted' in body or 'success' in body:
+                                        _log('security_code', 'verified', 'Application verified successfully!')
+                                        return {
+                                            'success': True,
+                                            'method': 'greenhouse_verified',
+                                            'error': None
+                                        }
+                                    break
+                            except Exception:
+                                continue
+                        break
+                except Exception:
+                    continue
+
+            # If we got here, we found and entered the code but couldn't confirm success
+            return {
+                'success': True,
+                'method': 'greenhouse_code_entered',
+                'error': 'Verification code entered - please verify application was received'
+            }
+
+        # Wait before next attempt
+        _log('security_code', 'polling', f'Attempt {attempt + 1}/24 - no code yet, waiting 5s...')
+        time.sleep(5)
+
+    # Timed out waiting for code
+    _log('security_code', 'timeout', 'Verification code not received within 2 minutes')
+    return {
+        'success': True,
+        'method': 'greenhouse_pending_verification',
+        'error': 'Application submitted but verification code not received - check email manually'
+    }
+
+
 # ATS detection patterns: (url_substring, ats_name)
 ATS_PATTERNS = [
     ('boards.greenhouse.io', 'greenhouse'),
@@ -56,11 +161,19 @@ def apply_to_job_with_playwright(
     resume_data: dict,
     cover_letter: str = '',
     resume_file_path: str = '',
+    user_id: int = None,
 ) -> dict:
     """
     Apply to a job via the company's career page using Playwright.
     If the URL is LinkedIn/Indeed, follows the "Apply on company site" link first.
     Returns {success, method, log, error}
+
+    Args:
+        job_url: URL of the job listing
+        resume_data: Parsed resume data dict
+        cover_letter: Generated cover letter text
+        resume_file_path: Path to resume PDF for upload
+        user_id: User ID for Gmail verification code fetching (optional)
     """
     from playwright.sync_api import sync_playwright
 
@@ -145,7 +258,7 @@ def apply_to_job_with_playwright(
             _log('detect', 'ats', f'Detected ATS: {ats}')
 
             if ats == 'greenhouse':
-                result = _apply_greenhouse(page, resume_data, cover_letter, resume_file_path, _log)
+                result = _apply_greenhouse(page, resume_data, cover_letter, resume_file_path, _log, user_id)
             elif ats == 'lever':
                 result = _apply_lever(page, resume_data, cover_letter, resume_file_path, _log)
             elif ats == 'workday':
@@ -686,7 +799,7 @@ def _fill_greenhouse_custom_fields(page, resume_data, cover_letter, _log):
     return filled
 
 
-def _apply_greenhouse(page, resume_data, cover_letter, resume_file_path, _log) -> dict:
+def _apply_greenhouse(page, resume_data, cover_letter, resume_file_path, _log, user_id=None) -> dict:
     """Greenhouse ATS - very common, predictable form structure."""
     _log('greenhouse', 'start', 'Applying via Greenhouse')
     data = resume_data or {}
@@ -809,8 +922,9 @@ def _apply_greenhouse(page, resume_data, cover_letter, resume_file_path, _log) -
                     else:
                         body = page.locator('body').inner_text()[:500].lower()
                         if 'security code' in body or 'verification code' in body:
-                            _log('greenhouse', 'security_code', 'Requires email verification')
-                            result2['error'] = 'Application submitted - check email for security code verification'
+                            # Try to fetch and enter verification code from Gmail
+                            gmail_result = _handle_greenhouse_security_code(page, user_id, _log)
+                            result2.update(gmail_result)
                         elif 'thank' in body or 'received' in body or 'submitted' in body:
                             _log('greenhouse', 'confirmed', 'Application confirmed on retry')
                             result2['success'] = True
@@ -822,8 +936,9 @@ def _apply_greenhouse(page, resume_data, cover_letter, resume_file_path, _log) -
                 # Check for success indicators
                 body = page.locator('body').inner_text()[:500].lower()
                 if 'security code' in body or 'verification code' in body:
-                    _log('greenhouse', 'security_code', 'Requires email verification')
-                    result['error'] = 'Application submitted - check email for security code verification'
+                    # Try to fetch and enter verification code from Gmail
+                    gmail_result = _handle_greenhouse_security_code(page, user_id, _log)
+                    result.update(gmail_result)
                 elif 'thank' in body or 'received' in body or 'submitted' in body:
                     _log('greenhouse', 'confirmed', 'Application confirmed - thank you page detected')
                     result['success'] = True

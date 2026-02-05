@@ -14,6 +14,7 @@ import {
   HelpCircle,
   Briefcase,
   Rocket,
+  Link2,
 } from 'lucide-react';
 
 const navigation = [
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Skills', href: '/dashboard/skills', icon: Puzzle },
   { name: 'Job Apply', href: '/dashboard/jobapply', icon: Briefcase },
   { name: 'Startup Jobs', href: '/dashboard/jobapply/startups', icon: Rocket },
+  { name: 'Integrations', href: '/dashboard/jobapply/integrations', icon: Link2 },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
 ];

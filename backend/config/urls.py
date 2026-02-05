@@ -11,4 +11,5 @@ urlpatterns = [
     path('api/skills/', include('skills.urls')),
     path('api/billing/', include('billing.urls')),
     path('api/jobapply/', include('jobapply.urls')),
+    path('api/google/', include('google_integration.urls')),
 ]

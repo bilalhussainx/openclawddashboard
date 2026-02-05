@@ -290,4 +290,12 @@ export const jobApplyApi = {
   retryApplication: (id: number) => api.post(`/jobapply/applications/${id}/retry/`),
 };
 
+// Gmail Integration API
+export const gmailApi = {
+  getOAuthUrl: () => api.get('/google/oauth/init/'),
+  getConnection: () => api.get('/google/connection/'),
+  disconnect: () => api.delete('/google/connection/'),
+  test: () => api.get('/google/test/'),
+};
+
 export default api;
